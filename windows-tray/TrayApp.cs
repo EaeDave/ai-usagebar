@@ -47,9 +47,13 @@ public sealed class TrayApp : ApplicationContext
 
     // ---- icon handling (avoid GDI leaks) ----
 
-    private Icon SwapIcon(Severity severity)
+    private Icon SwapIcon(Severity severity, double? percent = null)
     {
-        var newIcon = IconFactory.CreateDot(severity);
+        // Show the percentage when the active vendor reports one; otherwise a
+        // colored dot (e.g. OpenRouter/DeepSeek credit balances, or load/error).
+        var newIcon = percent is double p
+            ? IconFactory.CreatePercent(severity, p)
+            : IconFactory.CreateDot(severity);
         var old = _currentIcon;
         _currentIcon = newIcon;
         old?.Dispose();
@@ -128,7 +132,7 @@ public sealed class TrayApp : ApplicationContext
             var snap = await _backend.FetchAsync(_settings.Vendor);
             _last = snap;
 
-            _tray.Icon = SwapIcon(snap.Severity);
+            _tray.Icon = SwapIcon(snap.Severity, snap.IsError ? null : snap.IconPercent);
             _tray.Text = TrayTextFor(snap);
             _panel?.Update(snap);
         }

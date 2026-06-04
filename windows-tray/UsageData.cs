@@ -53,6 +53,14 @@ public sealed record UsageSnapshot
     public DateTime FetchedAt { get; init; } = DateTime.Now;
 
     /// <summary>
+    /// The percentage shown on the tray icon: the first percentage row (the
+    /// vendor's primary window, e.g. Session). Null for vendors that report no
+    /// percentage (OpenRouter/DeepSeek credit balances) — those fall back to a
+    /// colored dot.
+    /// </summary>
+    public double? IconPercent => Rows.Count > 0 ? Rows[0].Percent : null;
+
+    /// <summary>
     /// Build a human-readable tooltip (plain text — the Windows NotifyIcon
     /// tooltip does not render Pango markup and is capped at ~127 chars).
     /// </summary>

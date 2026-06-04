@@ -16,7 +16,7 @@ use ai_usagebar::tui::view::draw;
 use ai_usagebar::vendor::{HTTP_CLIENT_TIMEOUT, VendorId};
 use chrono::Utc;
 use crossterm::event::{
-    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers,
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
 };
 use crossterm::execute;
 use crossterm::terminal::{
@@ -103,6 +103,21 @@ async fn event_loop<B: ratatui::backend::Backend>(
                 let polled = res.unwrap_or(Ok(false)).unwrap_or(false);
                 if polled {
                     if let Ok(Event::Key(k)) = event::read() {
+                        // Optional diagnostics: set AIUSAGEBAR_KEYLOG=path to
+                        // append every raw key event (code/kind/modifiers) so we
+                        // can see exactly what the terminal emits per keystroke.
+                        keylog(&k);
+
+                        // On Windows Terminal (and terminals advertising the
+                        // Kitty keyboard protocol) crossterm reports key Repeat
+                        // (auto-repeat while held) and Release events in addition
+                        // to Press. Acting on anything but Press makes one tap
+                        // move several tabs and holding a key fly through them.
+                        // Treat each *press* as exactly one action; ignore
+                        // Repeat and Release entirely.
+                        if k.kind != KeyEventKind::Press {
+                            continue;
+                        }
                         // Settings overlay consumes all keys when open.
                         if let Some(s) = app.settings.as_mut() {
                             use ai_usagebar::tui::settings::{Action as SAction, handle_key as shandle};
@@ -180,6 +195,40 @@ fn spawn_one(
         let state = refresh_one(&client, &cfg, vendor).await;
         let _ = tx.send((idx, state));
     });
+}
+
+/// Append a raw key event to a diagnostic log. Writes to the path in
+/// `AIUSAGEBAR_KEYLOG` if set; otherwise to `keylog.txt` next to the running
+/// executable (and, as a last resort, the current directory). Always logs so we
+/// can see exactly how many events — and which `kind`s — a single keystroke
+/// produces on a given terminal. Remove once the input bug is fixed.
+fn keylog(k: &crossterm::event::KeyEvent) {
+    use std::io::Write;
+
+    // Resolve a writable path with sensible fallbacks.
+    let path = std::env::var_os("AIUSAGEBAR_KEYLOG")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.join("keylog.txt")))
+        })
+        .unwrap_or_else(|| std::path::PathBuf::from("keylog.txt"));
+
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        let _ = writeln!(
+            f,
+            "{} code={:?} kind={:?} mods={:?}",
+            chrono::Utc::now().format("%H:%M:%S%.3f"),
+            k.code,
+            k.kind,
+            k.modifiers
+        );
+    }
 }
 
 fn handle_key(app: &mut App, code: KeyCode, mods: KeyModifiers) -> bool {

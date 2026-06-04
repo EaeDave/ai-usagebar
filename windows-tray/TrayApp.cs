@@ -125,7 +125,10 @@ public sealed class TrayApp : ApplicationContext
 
     private async Task RefreshAsync(bool force = false)
     {
-        if (_fetching && !force) return;
+        // A forced refresh while another backend process is still running would
+        // contend with the same per-vendor cache lock and surface a misleading
+        // "cache lock timeout" error. Let the in-flight fetch finish instead.
+        if (_fetching) return;
         _fetching = true;
         try
         {

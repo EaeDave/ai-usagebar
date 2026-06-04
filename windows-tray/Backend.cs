@@ -9,6 +9,8 @@ namespace AiUsagebarTray;
 /// </summary>
 public sealed class Backend
 {
+    private static readonly TimeSpan BackendTimeout = TimeSpan.FromSeconds(90);
+
     private readonly Settings _settings;
 
     public Backend(Settings settings) => _settings = settings;
@@ -80,12 +82,33 @@ public sealed class Backend
 
         try
         {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(BackendTimeout);
+
             using var proc = new Process { StartInfo = psi };
             proc.Start();
 
-            var stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);
-            var stderrTask = proc.StandardError.ReadToEndAsync(ct);
-            await proc.WaitForExitAsync(ct);
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync(timeoutCts.Token);
+            var stderrTask = proc.StandardError.ReadToEndAsync(timeoutCts.Token);
+
+            try
+            {
+                await proc.WaitForExitAsync(timeoutCts.Token);
+            }
+            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+            {
+                try
+                {
+                    if (!proc.HasExited)
+                        proc.Kill(entireProcessTree: true);
+                }
+                catch
+                {
+                    // Best-effort cleanup; the user-facing error is the timeout.
+                }
+
+                return ErrorSnapshot(vendor, $"ai-usagebar timed out after {BackendTimeout.TotalSeconds:0}s");
+            }
 
             var stdout = (await stdoutTask).Trim();
             var stderr = (await stderrTask).Trim();

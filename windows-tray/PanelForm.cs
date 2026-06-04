@@ -256,20 +256,33 @@ public sealed class PanelForm : Form
     }
 
     /// <summary>
-    /// Find an installed Nerd Font (or other glyph-capable font) by name.
+    /// Find an installed glyph-capable font. Prefers a dedicated symbols font,
+    /// then any "Nerd Font" family (these carry the icon glyphs we use), then a
+    /// few common patched families by substring so name variants still match.
     /// Returns null if none is present, so callers fall back to text.
     /// </summary>
     private static string? ResolveGlyphFont()
     {
-        string[] preferred =
-        {
-            "Symbols Nerd Font", "Symbols Nerd Font Mono",
-            "CaskaydiaCove Nerd Font", "FiraCode Nerd Font",
-            "JetBrainsMono Nerd Font", "Hack Nerd Font",
-        };
         using var installed = new InstalledFontCollection();
-        var names = installed.Families.Select(f => f.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return preferred.FirstOrDefault(names.Contains);
+        var names = installed.Families.Select(f => f.Name).ToList();
+
+        bool Has(string name) =>
+            names.Any(n => n.Equals(name, StringComparison.OrdinalIgnoreCase));
+        string? FirstContaining(params string[] needles) =>
+            names.FirstOrDefault(n =>
+                needles.Any(x => n.Contains(x, StringComparison.OrdinalIgnoreCase)));
+
+        // 1. A dedicated symbols font renders glyphs at any base typeface.
+        foreach (var exact in new[] { "Symbols Nerd Font", "Symbols Nerd Font Mono" })
+            if (Has(exact)) return exact;
+
+        // 2. Any installed "Nerd Font" family (covers "JetBrainsMono Nerd Font",
+        //    "MesloLGS NF", "… NFM", etc.).
+        var nerd = FirstContaining("Nerd Font", " NF", " NFM", "NerdFont");
+        if (nerd is not null) return nerd;
+
+        // 3. Common patched families by substring as a last resort.
+        return FirstContaining("CaskaydiaCove", "FiraCode", "JetBrainsMono", "Hack", "Meslo");
     }
 
     private readonly record struct Section(string Glyph, string Label, string Pct, string Reset);

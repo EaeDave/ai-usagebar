@@ -1,8 +1,60 @@
 # ai-usagebar
 
-Waybar widget, tabbed TUI, and Windows tray widget for AI plan usage across **Anthropic Claude**, **OpenAI Codex/ChatGPT**, **Z.AI (GLM)**, **OpenRouter**, and **DeepSeek**.
+Native Windows tray app, Waybar widget, and tabbed terminal UI for monitoring AI usage, LLM token limits, subscription quotas, and plan usage across **Anthropic Claude**, **OpenAI Codex/ChatGPT**, **Z.AI (GLM)**, **OpenRouter**, and **DeepSeek**.
 
 This started as a Rust port of [`claudebar`](https://github.com/mryll/claudebar) and stays drop-in compatible with it. It keeps the minimalist Pango-bordered tooltip, Omarchy theme auto-detection, and flock-protected OAuth refresh, then adds three more vendors and a proper testable codebase instead of one long shell script.
+
+## Windows tray app for LLM usage monitoring
+
+This fork adds a **native Windows 10/Windows 11 system tray monitor** for people who want to track AI coding assistant usage without running Waybar, Hyprland, WSL UI glue, or a Linux desktop. It is designed as a small desktop widget for checking how much of your Claude, OpenAI/ChatGPT/Codex, Z.AI, OpenRouter, or DeepSeek quota is already used.
+
+If you are searching for a **Windows app to monitor Claude usage**, **OpenAI Codex usage**, **ChatGPT usage limits**, **LLM token usage**, **AI subscription quota**, or **AI coding assistant plan limits**, this is the Windows-portable build of `ai-usagebar`.
+
+The Windows tray widget shows live usage from the same backend as the Linux/macOS command-line tool:
+
+- **Anthropic Claude / Claude Code**: session, weekly, Sonnet, and extra-usage progress.
+- **OpenAI / ChatGPT / Codex**: Codex session, weekly limits, code-review usage, and credits.
+- **Z.AI / GLM**: 5-hour session, weekly quota, and monthly MCP/tool limits.
+- **OpenRouter**: account balance plus daily, weekly, and monthly spend.
+- **DeepSeek**: API-key based usage display when enabled.
+
+![Windows tray panel for Anthropic Claude usage with session, weekly, Sonnet, and extra usage progress bars](windows-tray/screenshots/panel-anthropic.png)
+
+![Windows tray tooltip showing Claude Code usage summary and reset times](windows-tray/screenshots/tray-tooltip.png)
+
+![Windows tray right-click vendor menu for Anthropic, OpenAI, Z.AI, OpenRouter, and DeepSeek](windows-tray/screenshots/vendor-menu.png)
+
+![Windows tray panel for OpenAI Codex and ChatGPT usage with session, weekly, review, and credits rows](windows-tray/screenshots/panel-openai.png)
+
+### Why the Windows port matters
+
+The original project is primarily a Linux Waybar/terminal widget. This fork keeps that Linux/macOS behavior, but also makes the same AI usage monitor practical on Windows:
+
+- The release is a **portable Windows zip/folder bundle**. Unzip it and run `ai-usagebar-tray.exe`.
+- The tray icon can show the current usage percentage directly in the Windows notification area.
+- Left-click opens a compact usage panel with progress bars.
+- Hover shows a plain Windows tooltip with plan status and reset times.
+- Right-click opens a vendor selector for Anthropic, OpenAI, Z.AI, OpenRouter, and DeepSeek.
+- “Start with Windows” is available from the tray menu and uses the current-user registry startup key.
+- No admin install is required for the tray app.
+- The tray app does not reimplement vendor authentication or API parsing. It calls the Rust backend with `--json`, so Windows, Linux, and macOS stay aligned.
+
+Download the latest Windows bundle from the fork releases:
+
+https://github.com/EaeDave/ai-usagebar/releases
+
+The bundle includes both executables:
+
+```text
+ai-usagebar-tray.exe   # native Windows tray UI
+ai-usagebar.exe        # Rust backend used by the tray app
+```
+
+Build instructions and implementation details are in [`windows-tray/README.md`](windows-tray/README.md).
+
+## Linux/macOS Waybar and TUI
+
+The original Linux/macOS experience still exists: `ai-usagebar` can output Waybar-compatible JSON, and `ai-usagebar-tui` provides a standalone terminal dashboard for all enabled vendors.
 
 ![Waybar widget showing `cld 29% · 1h 12m` in the top-right, with the hover tooltip showing Claude Max 20x session/weekly/sonnet/extra-usage progress bars](screenshot.png)
 
@@ -10,7 +62,7 @@ This started as a Rust port of [`claudebar`](https://github.com/mryll/claudebar)
 
 - **Per-vendor Waybar modules** with the same JSON shape as claudebar.
 - **Tabbed TUI** (`ai-usagebar-tui`) with Tab/h/l switching, per-tab refresh, and 60-second auto-refresh. Native ratatui widgets fill the available terminal width and keep the vendor tabs visually consistent.
-- **Native Windows tray widget** in `windows-tray/`, backed by the same Rust CLI and bundled as a portable folder release.
+- **Native Windows tray widget** in `windows-tray/`, backed by the same Rust CLI and bundled as a portable Windows release.
 - **Scroll-to-cycle on the bar**: wire `on-scroll-up` / `on-scroll-down`, and one bar item cycles through your enabled vendors.
 - **Config-driven primary vendor**: set `[ui] primary` once; the widget shows that vendor by default and the TUI opens on its tab.
 - **Local testing tools**: `--pretty` renders ANSI-colored terminal output (auto-detects TTY), and `--watch N` re-renders every N seconds.
@@ -41,14 +93,6 @@ cargo binstall ai-usagebar               # download prebuilt binary (needs cargo
 ```
 
 `cargo binstall` fetches the same x86_64 / aarch64 Linux tarball the AUR `-bin` package uses. Both install `ai-usagebar` + `ai-usagebar-tui` to `~/.cargo/bin/`.
-
-### Windows
-
-Download the Windows tray bundle from the fork releases, unzip the folder, and run `ai-usagebar-tray.exe`:
-
-https://github.com/EaeDave/ai-usagebar/releases
-
-The bundle includes both `ai-usagebar-tray.exe` and `ai-usagebar.exe`. The tray app calls the Rust backend with `--json`, so vendor auth and usage parsing stay shared across Linux, macOS, and Windows. Build instructions live in [`windows-tray/README.md`](windows-tray/README.md).
 
 ### From source
 

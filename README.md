@@ -1,6 +1,6 @@
 # ai-usagebar
 
-Waybar widget and tabbed TUI for AI plan usage across **Anthropic Claude**, **OpenAI Codex/ChatGPT**, **Z.AI (GLM)**, **OpenRouter**, and **DeepSeek**.
+Waybar widget, tabbed TUI, and Windows tray widget for AI plan usage across **Anthropic Claude**, **OpenAI Codex/ChatGPT**, **Z.AI (GLM)**, **OpenRouter**, and **DeepSeek**.
 
 This started as a Rust port of [`claudebar`](https://github.com/mryll/claudebar) and stays drop-in compatible with it. It keeps the minimalist Pango-bordered tooltip, Omarchy theme auto-detection, and flock-protected OAuth refresh, then adds three more vendors and a proper testable codebase instead of one long shell script.
 
@@ -10,6 +10,7 @@ This started as a Rust port of [`claudebar`](https://github.com/mryll/claudebar)
 
 - **Per-vendor Waybar modules** with the same JSON shape as claudebar.
 - **Tabbed TUI** (`ai-usagebar-tui`) with Tab/h/l switching, per-tab refresh, and 60-second auto-refresh. Native ratatui widgets fill the available terminal width and keep the vendor tabs visually consistent.
+- **Native Windows tray widget** in `windows-tray/`, backed by the same Rust CLI and bundled as a portable folder release.
 - **Scroll-to-cycle on the bar**: wire `on-scroll-up` / `on-scroll-down`, and one bar item cycles through your enabled vendors.
 - **Config-driven primary vendor**: set `[ui] primary` once; the widget shows that vendor by default and the TUI opens on its tab.
 - **Local testing tools**: `--pretty` renders ANSI-colored terminal output (auto-detects TTY), and `--watch N` re-renders every N seconds.
@@ -40,6 +41,14 @@ cargo binstall ai-usagebar               # download prebuilt binary (needs cargo
 ```
 
 `cargo binstall` fetches the same x86_64 / aarch64 Linux tarball the AUR `-bin` package uses. Both install `ai-usagebar` + `ai-usagebar-tui` to `~/.cargo/bin/`.
+
+### Windows
+
+Download the Windows tray bundle from the fork releases, unzip the folder, and run `ai-usagebar-tray.exe`:
+
+https://github.com/EaeDave/ai-usagebar/releases
+
+The bundle includes both `ai-usagebar-tray.exe` and `ai-usagebar.exe`. The tray app calls the Rust backend with `--json`, so vendor auth and usage parsing stay shared across Linux, macOS, and Windows. Build instructions live in [`windows-tray/README.md`](windows-tray/README.md).
 
 ### From source
 

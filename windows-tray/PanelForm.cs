@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Text;
 using System.Windows.Forms;
 
 namespace AiUsagebarTray;
@@ -7,18 +8,29 @@ namespace AiUsagebarTray;
 /// <summary>
 /// A small borderless popup that renders the detailed usage panel (progress
 /// bars), shown on left-click of the tray icon near the cursor. Mirrors the
-/// bordered tooltip the Waybar/TUI build shows.
+/// bordered tooltip the Waybar/TUI build shows, with rounded corners, a soft
+/// drop shadow, and Nerd Font glyphs when available.
 /// </summary>
 public sealed class PanelForm : Form
 {
     private UsageSnapshot _snapshot;
 
-    // One Dark palette.
+    // One Dark palette (matches the Waybar/TUI default theme).
     private static readonly Color Bg = Color.FromArgb(40, 44, 52);       // #282c34
-    private static readonly Color Border = Color.FromArgb(97, 175, 239); // #61afef
+    private static readonly Color Accent = Color.FromArgb(97, 175, 239); // #61afef
     private static readonly Color Fg = Color.FromArgb(171, 178, 191);    // #abb2bf
     private static readonly Color Dim = Color.FromArgb(92, 99, 112);     // #5c6370
     private static readonly Color Track = Color.FromArgb(62, 68, 81);    // #3e4451
+
+    // Layout constants.
+    private const int Pad = 18;          // outer padding
+    private const int CornerRadius = 12;
+    private const int BarHeight = 8;
+    private const int PctColumn = 52;    // reserved width for the "NN%" text
+    private const int SectionGap = 16;
+
+    // Resolved once: a Nerd Font family if installed, else null (text fallback).
+    private static readonly string? GlyphFont = ResolveGlyphFont();
 
     public PanelForm(UsageSnapshot snapshot)
     {
@@ -29,17 +41,44 @@ public sealed class PanelForm : Form
         StartPosition = FormStartPosition.Manual;
         BackColor = Bg;
         DoubleBuffered = true;
-        Width = 320;
-        Height = 220;
-        Padding = new Padding(16);
+        Width = 340;
+        Height = 240; // recomputed per snapshot in Relayout()
         // Close when it loses focus, like a tooltip/flyout.
         Deactivate += (_, _) => Hide();
+        Relayout();
+    }
+
+    /// <summary>Drop the focus rectangle and give the window a soft shadow.</summary>
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            const int CS_DROPSHADOW = 0x00020000;
+            var cp = base.CreateParams;
+            cp.ClassStyle |= CS_DROPSHADOW;
+            return cp;
+        }
     }
 
     public void Update(UsageSnapshot snapshot)
     {
         _snapshot = snapshot;
+        Relayout();
         Invalidate();
+    }
+
+    /// <summary>Compute height from the visible sections and round the corners.</summary>
+    private void Relayout()
+    {
+        int rows = _snapshot.IsError ? 0 : VisibleSections().Count;
+        // title + N sections + footer, all with consistent spacing.
+        int contentHeight = _snapshot.IsError
+            ? 110
+            : 34 /*title*/ + rows * (48 + SectionGap) + 26 /*footer*/;
+        Height = Pad * 2 + contentHeight;
+
+        using var path = RoundedRect(new Rectangle(0, 0, Width, Height), CornerRadius);
+        Region = new Region(path);
     }
 
     /// <summary>Show near the cursor, kept on-screen.</summary>
@@ -61,79 +100,134 @@ public sealed class PanelForm : Form
         base.OnPaint(e);
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+        g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
 
-        using var border = new Pen(Border, 1.5f);
-        g.DrawRectangle(border, 1, 1, Width - 3, Height - 3);
+        // Filled rounded background + 1px accent border.
+        var outer = new Rectangle(0, 0, Width - 1, Height - 1);
+        using (var path = RoundedRect(outer, CornerRadius))
+        using (var bg = new SolidBrush(Bg))
+        using (var border = new Pen(Color.FromArgb(90, Accent), 1f))
+        {
+            g.FillPath(bg, path);
+            g.DrawPath(border, path);
+        }
 
-        using var titleFont = new Font("Segoe UI", 11f, FontStyle.Bold);
-        using var font = new Font("Segoe UI", 9.5f, FontStyle.Regular);
+        using var titleFont = new Font("Segoe UI Semibold", 12f, FontStyle.Bold);
+        using var labelFont = new Font("Segoe UI", 10f, FontStyle.Regular);
         using var dimFont = new Font("Segoe UI", 8.5f, FontStyle.Regular);
-        using var titleBrush = new SolidBrush(Border);
+        using var pctFont = new Font("Segoe UI Semibold", 10f, FontStyle.Bold);
+        using var titleBrush = new SolidBrush(Accent);
         using var fgBrush = new SolidBrush(Fg);
         using var dimBrush = new SolidBrush(Dim);
 
-        int x = 20;
-        int y = 16;
+        int x = Pad;
+        int y = Pad;
 
         if (_snapshot.IsError)
         {
-            using var errFont = new Font("Segoe UI", 9.5f, FontStyle.Regular);
             using var errBrush = new SolidBrush(IconFactory.ColorFor(Severity.Critical));
-            g.DrawString("⚠  " + _snapshot.Vendor, titleFont, errBrush, x, y);
-            var rect = new RectangleF(x, y + 28, Width - 40, Height - 60);
-            g.DrawString(_snapshot.ErrorMessage, errFont, fgBrush, rect);
+            DrawGlyphText(g, "\uf071", "  " + _snapshot.Vendor, titleFont, errBrush, x, y); // nf-fa-warning
+            var rect = new RectangleF(x, y + 32, Width - 2 * Pad, Height - 2 * Pad - 32);
+            g.DrawString(_snapshot.ErrorMessage, labelFont, fgBrush, rect);
             return;
         }
 
-        // Title.
+        // Title (plan name or vendor).
         var title = string.IsNullOrWhiteSpace(_snapshot.Plan) ? _snapshot.Vendor : _snapshot.Plan;
         g.DrawString(title, titleFont, titleBrush, x, y);
-        y += 30;
+        y += 34;
 
-        // Bars.
-        y = DrawBar(g, x, y, "Session", _snapshot.SessionPct, _snapshot.SessionReset, font, dimFont, fgBrush, dimBrush);
-        y = DrawBar(g, x, y, "Weekly", _snapshot.WeeklyPct, _snapshot.WeeklyReset, font, dimFont, fgBrush, dimBrush);
-        if (!string.IsNullOrWhiteSpace(_snapshot.SonnetPct))
-            y = DrawBar(g, x, y, "Sonnet", _snapshot.SonnetPct, "", font, dimFont, fgBrush, dimBrush);
+        foreach (var s in VisibleSections())
+            y = DrawSection(g, x, y, s, labelFont, dimFont, pctFont, fgBrush, dimBrush);
 
-        // Footer.
-        g.DrawString($"Updated {_snapshot.FetchedAt:HH:mm}", dimFont, dimBrush, x, Height - 28);
+        // Footer: subtle divider + timestamp.
+        int footY = Height - Pad - 16;
+        using (var divider = new Pen(Color.FromArgb(40, Fg)))
+            g.DrawLine(divider, x, footY - 6, Width - Pad, footY - 6);
+        DrawGlyphText(g, "\uf021", $"  Updated {_snapshot.FetchedAt:HH:mm}", dimFont, dimBrush, x, footY); // nf-fa-refresh
     }
 
-    private int DrawBar(Graphics g, int x, int y, string label, string pctStr, string reset,
-        Font font, Font dimFont, Brush fgBrush, Brush dimBrush)
+    /// <summary>The sections to render, skipping empty/zero-only ones.</summary>
+    private List<Section> VisibleSections()
     {
-        g.DrawString(label, font, fgBrush, x, y);
+        var list = new List<Section>();
+        if (!string.IsNullOrWhiteSpace(_snapshot.SessionPct))
+            list.Add(new Section("\uf017", "Session", _snapshot.SessionPct, _snapshot.SessionReset)); // clock
+        if (!string.IsNullOrWhiteSpace(_snapshot.WeeklyPct))
+            list.Add(new Section("\uf073", "Weekly", _snapshot.WeeklyPct, _snapshot.WeeklyReset)); // calendar
+        // Sonnet is noisy at 0% — only show when there's actual usage.
+        if (!string.IsNullOrWhiteSpace(_snapshot.SonnetPct) && ParsePct(_snapshot.SonnetPct) > 0)
+            list.Add(new Section("\uf0c9", "Sonnet", _snapshot.SonnetPct, ""));
+        return list;
+    }
 
-        var pct = ParsePct(pctStr);
-        var severity = SeverityForPct(pct);
-        var barColor = IconFactory.ColorFor(severity);
+    private int DrawSection(Graphics g, int x, int y, Section s,
+        Font labelFont, Font dimFont, Font pctFont, Brush fgBrush, Brush dimBrush)
+    {
+        // Label row (glyph + name).
+        DrawGlyphText(g, s.Glyph, "  " + s.Label, labelFont, fgBrush, x, y);
 
-        int barY = y + 20;
-        int barW = Width - 40 - 50; // leave room for the % text
-        int barH = 10;
+        var pct = ParsePct(s.Pct);
+        var barColor = IconFactory.ColorFor(SeverityForPct(pct));
 
-        using (var track = new SolidBrush(Track))
-            g.FillRectangle(track, x, barY, barW, barH);
-        using (var fill = new SolidBrush(barColor))
-            g.FillRectangle(fill, x, barY, (int)(barW * pct / 100.0), barH);
+        int barY = y + 24;
+        int barW = Width - 2 * Pad - PctColumn;
 
-        using var pctBrush = new SolidBrush(barColor);
-        using var pctFont = new Font("Segoe UI", 9f, FontStyle.Bold);
-        g.DrawString($"{pctStr}%", pctFont, pctBrush, x + barW + 8, barY - 4);
+        // Rounded track + fill.
+        var trackRect = new Rectangle(x, barY, barW, BarHeight);
+        using (var tpath = RoundedRect(trackRect, BarHeight / 2))
+        using (var tbrush = new SolidBrush(Track))
+            g.FillPath(tbrush, tpath);
 
-        int next = barY + barH + 4;
-        if (!string.IsNullOrWhiteSpace(reset))
+        int fillW = Math.Max(BarHeight, (int)(barW * pct / 100.0));
+        if (pct > 0)
         {
-            g.DrawString($"Resets in {reset}", dimFont, dimBrush, x, next);
-            next += 18;
+            var fillRect = new Rectangle(x, barY, fillW, BarHeight);
+            using var fpath = RoundedRect(fillRect, BarHeight / 2);
+            using var fbrush = new SolidBrush(barColor);
+            g.FillPath(fbrush, fpath);
         }
-        return next + 8;
+
+        // % text, vertically centered on the bar, right-aligned in its column.
+        using var pctBrush = new SolidBrush(barColor);
+        var pctText = $"{s.Pct}%";
+        var sz = g.MeasureString(pctText, pctFont);
+        g.DrawString(pctText, pctFont, pctBrush,
+            Width - Pad - sz.Width, barY + BarHeight / 2f - sz.Height / 2f);
+
+        int next = barY + BarHeight + 6;
+        if (!string.IsNullOrWhiteSpace(s.Reset))
+        {
+            g.DrawString($"Resets in {s.Reset}", dimFont, dimBrush, x, next);
+            next += 16;
+        }
+        return next + SectionGap;
+    }
+
+    /// <summary>
+    /// Draw a glyph (Nerd Font if available) followed by text. When no Nerd Font
+    /// is installed, the glyph is omitted so we never render tofu boxes.
+    /// </summary>
+    private static void DrawGlyphText(Graphics g, string glyph, string text, Font textFont, Brush brush, float x, float y)
+    {
+        if (GlyphFont is not null)
+        {
+            using var gf = new Font(GlyphFont, textFont.Size, textFont.Style);
+            g.DrawString(glyph, gf, brush, x, y);
+            x += g.MeasureString(glyph, gf).Width;
+            g.DrawString(text, textFont, brush, x, y);
+        }
+        else
+        {
+            // Trim the leading spacing that normally separates glyph and label.
+            g.DrawString(text.TrimStart(), textFont, brush, x, y);
+        }
     }
 
     private static double ParsePct(string s) =>
-        double.TryParse(s, out var v) ? Math.Clamp(v, 0, 100) : 0;
+        double.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, out var v)
+            ? Math.Clamp(v, 0, 100)
+            : 0;
 
     private static Severity SeverityForPct(double pct) => pct switch
     {
@@ -142,4 +236,41 @@ public sealed class PanelForm : Form
         >= 50 => Severity.Mid,
         _ => Severity.Low,
     };
+
+    /// <summary>Build a rounded-rectangle path.</summary>
+    private static GraphicsPath RoundedRect(Rectangle r, int radius)
+    {
+        int d = radius * 2;
+        var path = new GraphicsPath();
+        if (d <= 0)
+        {
+            path.AddRectangle(r);
+            return path;
+        }
+        path.AddArc(r.X, r.Y, d, d, 180, 90);
+        path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+
+    /// <summary>
+    /// Find an installed Nerd Font (or other glyph-capable font) by name.
+    /// Returns null if none is present, so callers fall back to text.
+    /// </summary>
+    private static string? ResolveGlyphFont()
+    {
+        string[] preferred =
+        {
+            "Symbols Nerd Font", "Symbols Nerd Font Mono",
+            "CaskaydiaCove Nerd Font", "FiraCode Nerd Font",
+            "JetBrainsMono Nerd Font", "Hack Nerd Font",
+        };
+        using var installed = new InstalledFontCollection();
+        var names = installed.Families.Select(f => f.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return preferred.FirstOrDefault(names.Contains);
+    }
+
+    private readonly record struct Section(string Glyph, string Label, string Pct, string Reset);
 }

@@ -75,7 +75,7 @@ public sealed class Backend
         psi.ArgumentList.Add("--vendor");
         psi.ArgumentList.Add(vendor);
         psi.ArgumentList.Add("--format");
-        psi.ArgumentList.Add(UsageParser.FormatString);
+        psi.ArgumentList.Add(VendorFormat.FormatFor(vendor));
         psi.ArgumentList.Add("--json");
 
         try
@@ -105,7 +105,7 @@ public sealed class Backend
                 .LastOrDefault(l => l.TrimStart().StartsWith('{'))
                 ?? stdout;
 
-            return UsageParser.Parse(vendor, line.Trim());
+            return VendorFormat.Parse(vendor, line.Trim());
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

@@ -68,11 +68,16 @@ public sealed class PanelForm : Form
     /// <summary>Compute height from the visible sections and round the corners.</summary>
     private void Relayout()
     {
-        int rows = _snapshot.IsError ? 0 : VisibleSections().Count;
-        // title + N sections + footer, all with consistent spacing.
+        // title + N bar rows + M detail lines + footer, consistent spacing.
+        int barRows = _snapshot.Rows.Count;
+        int detailRows = _snapshot.Details.Count;
         int contentHeight = _snapshot.IsError
             ? 110
-            : 34 /*title*/ + rows * (48 + SectionGap) + 26 /*footer*/;
+            : 34 /*title*/
+              + barRows * (48 + SectionGap)
+              + detailRows * 24
+              + (detailRows > 0 ? 6 : 0)
+              + 26 /*footer*/;
         Height = Pad * 2 + contentHeight;
 
         // Form.Region's setter does not dispose the previous region, and
@@ -135,13 +140,18 @@ public sealed class PanelForm : Form
             return;
         }
 
-        // Title (plan name or vendor).
-        var title = string.IsNullOrWhiteSpace(_snapshot.Plan) ? _snapshot.Vendor : _snapshot.Plan;
+        // Title (plan/account label or vendor).
+        var title = string.IsNullOrWhiteSpace(_snapshot.Title) ? _snapshot.Vendor : _snapshot.Title;
         g.DrawString(title, titleFont, titleBrush, x, y);
         y += 34;
 
-        foreach (var s in VisibleSections())
-            y = DrawSection(g, x, y, s, labelFont, dimFont, pctFont, fgBrush, dimBrush);
+        // Percentage rows (Session/Weekly/…).
+        foreach (var row in _snapshot.Rows)
+            y = DrawBarRow(g, x, y, row, labelFont, dimFont, pctFont, fgBrush, dimBrush);
+
+        // Non-percentage detail lines (credit balances, etc.).
+        foreach (var d in _snapshot.Details)
+            y = DrawDetailRow(g, x, y, d, labelFont, fgBrush);
 
         // Footer: subtle divider + timestamp.
         int footY = Height - Pad - 16;
@@ -150,28 +160,13 @@ public sealed class PanelForm : Form
         DrawGlyphText(g, "\uf021", $"  Updated {_snapshot.FetchedAt:HH:mm}", dimFont, dimBrush, x, footY); // nf-fa-refresh
     }
 
-    /// <summary>The sections to render, skipping empty/zero-only ones.</summary>
-    private List<Section> VisibleSections()
-    {
-        var list = new List<Section>();
-        if (!string.IsNullOrWhiteSpace(_snapshot.SessionPct))
-            list.Add(new Section("\uf017", "Session", _snapshot.SessionPct, _snapshot.SessionReset)); // clock
-        if (!string.IsNullOrWhiteSpace(_snapshot.WeeklyPct))
-            list.Add(new Section("\uf073", "Weekly", _snapshot.WeeklyPct, _snapshot.WeeklyReset)); // calendar
-        // Sonnet is noisy at 0% — only show when there's actual usage.
-        if (!string.IsNullOrWhiteSpace(_snapshot.SonnetPct) && ParsePct(_snapshot.SonnetPct) > 0)
-            list.Add(new Section("\uf0c9", "Sonnet", _snapshot.SonnetPct, ""));
-        return list;
-    }
-
-    private int DrawSection(Graphics g, int x, int y, Section s,
+    private int DrawBarRow(Graphics g, int x, int y, UsageRow row,
         Font labelFont, Font dimFont, Font pctFont, Brush fgBrush, Brush dimBrush)
     {
         // Label row (glyph + name).
-        DrawGlyphText(g, s.Glyph, "  " + s.Label, labelFont, fgBrush, x, y);
+        DrawGlyphText(g, row.Glyph, "  " + row.Label, labelFont, fgBrush, x, y);
 
-        var pct = ParsePct(s.Pct);
-        var barColor = IconFactory.ColorFor(SeverityForPct(pct));
+        var barColor = IconFactory.ColorFor(SeverityForPct(row.Percent));
 
         int barY = y + 24;
         int barW = Width - 2 * Pad - PctColumn;
@@ -182,9 +177,9 @@ public sealed class PanelForm : Form
         using (var tbrush = new SolidBrush(Track))
             g.FillPath(tbrush, tpath);
 
-        int fillW = Math.Max(BarHeight, (int)(barW * pct / 100.0));
-        if (pct > 0)
+        if (row.Percent > 0)
         {
+            int fillW = Math.Max(BarHeight, (int)(barW * row.Percent / 100.0));
             var fillRect = new Rectangle(x, barY, fillW, BarHeight);
             using var fpath = RoundedRect(fillRect, BarHeight / 2);
             using var fbrush = new SolidBrush(barColor);
@@ -193,18 +188,27 @@ public sealed class PanelForm : Form
 
         // % text, vertically centered on the bar, right-aligned in its column.
         using var pctBrush = new SolidBrush(barColor);
-        var pctText = $"{s.Pct}%";
+        var pctText = $"{UsageSnapshot.FormatPct(row.Percent)}%";
         var sz = g.MeasureString(pctText, pctFont);
         g.DrawString(pctText, pctFont, pctBrush,
             Width - Pad - sz.Width, barY + BarHeight / 2f - sz.Height / 2f);
 
         int next = barY + BarHeight + 6;
-        if (!string.IsNullOrWhiteSpace(s.Reset))
+        if (!string.IsNullOrWhiteSpace(row.Reset))
         {
-            g.DrawString($"Resets in {s.Reset}", dimFont, dimBrush, x, next);
+            g.DrawString($"Resets in {row.Reset}", dimFont, dimBrush, x, next);
             next += 16;
         }
         return next + SectionGap;
+    }
+
+    private int DrawDetailRow(Graphics g, int x, int y, DetailRow d, Font labelFont, Brush fgBrush)
+    {
+        DrawGlyphText(g, d.Glyph, "  " + d.Label, labelFont, fgBrush, x, y);
+        using var valBrush = new SolidBrush(Accent);
+        var sz = g.MeasureString(d.Value, labelFont);
+        g.DrawString(d.Value, labelFont, valBrush, Width - Pad - sz.Width, y);
+        return y + 24;
     }
 
     /// <summary>
@@ -226,11 +230,6 @@ public sealed class PanelForm : Form
             g.DrawString(text.TrimStart(), textFont, brush, x, y);
         }
     }
-
-    private static double ParsePct(string s) =>
-        double.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, out var v)
-            ? Math.Clamp(v, 0, 100)
-            : 0;
 
     private static Severity SeverityForPct(double pct) => pct switch
     {
@@ -287,6 +286,4 @@ public sealed class PanelForm : Form
         // 3. Common patched families by substring as a last resort.
         return FirstContaining("CaskaydiaCove", "FiraCode", "JetBrainsMono", "Hack", "Meslo");
     }
-
-    private readonly record struct Section(string Glyph, string Label, string Pct, string Reset);
 }

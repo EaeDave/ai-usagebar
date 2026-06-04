@@ -13,11 +13,22 @@ pub const REFRESH_SIGNAL: &str = "-RTMIN+13";
 pub const PROCESS_NAME: &str = "waybar";
 
 /// Best-effort Waybar refresh. Failing is harmless when Waybar is not running.
+///
+/// Unix-only: it shells out to `pkill -RTMIN+13 waybar`. Waybar is a
+/// Wayland-only program, so on Windows (and anywhere without `pkill`) this is a
+/// no-op — the bar/tray consumer is expected to poll on its own interval.
+#[cfg(unix)]
 pub fn request_refresh() {
     let _ = std::process::Command::new("pkill")
         .args([REFRESH_SIGNAL, PROCESS_NAME])
         .status();
 }
+
+/// No-op on non-Unix platforms (e.g. Windows): there is no Waybar process and
+/// no `pkill`. Consumers (such as a Windows tray app) refresh on their own
+/// polling interval instead of via a signal.
+#[cfg(not(unix))]
+pub fn request_refresh() {}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct WaybarOutput {

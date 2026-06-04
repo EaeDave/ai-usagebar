@@ -33,10 +33,28 @@ pub struct Tokens {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// Default location: `~/.codex/auth.json`.
+/// Default location: `~/.codex/auth.json` (Unix/macOS) or
+/// `%USERPROFILE%\.codex\auth.json` (Windows).
+///
+/// Uses `directories::BaseDirs::home_dir()` for cross-platform home resolution,
+/// matching `cache.rs` / `active.rs`. Falls back to legacy env vars.
 pub fn default_path() -> Result<PathBuf> {
-    let home = std::env::var_os("HOME").ok_or_else(|| AppError::Other("HOME not set".into()))?;
-    Ok(PathBuf::from(home).join(".codex/auth.json"))
+    let home = home_dir().ok_or_else(|| {
+        AppError::Other(
+            "could not determine home directory (HOME / %USERPROFILE% not set)".into(),
+        )
+    })?;
+    Ok(home.join(".codex").join("auth.json"))
+}
+
+/// Cross-platform home directory: `%USERPROFILE%` on Windows, `$HOME` on Unix.
+fn home_dir() -> Option<PathBuf> {
+    if let Some(base) = directories::BaseDirs::new() {
+        return Some(base.home_dir().to_path_buf());
+    }
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
 }
 
 pub fn read_from(path: &Path) -> Result<AuthFile> {

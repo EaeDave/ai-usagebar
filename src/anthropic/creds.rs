@@ -99,10 +99,32 @@ fn capitalize_first(s: &str) -> String {
     }
 }
 
-/// Default location: `~/.claude/.credentials.json`.
+/// Default location: `~/.claude/.credentials.json` (Unix/macOS) or
+/// `%USERPROFILE%\.claude\.credentials.json` (Windows).
+///
+/// Uses `directories::BaseDirs::home_dir()` for cross-platform home resolution
+/// (`$HOME` on Unix, `%USERPROFILE%`/Known Folder on Windows), matching how
+/// `cache.rs` and `active.rs` resolve base directories. Falls back to the
+/// legacy `HOME` env var if `BaseDirs` is unavailable.
 pub fn default_path() -> Result<PathBuf> {
-    let home = std::env::var_os("HOME").ok_or_else(|| AppError::Other("HOME not set".into()))?;
-    Ok(PathBuf::from(home).join(".claude/.credentials.json"))
+    let home = home_dir().ok_or_else(|| {
+        AppError::Other(
+            "could not determine home directory (HOME / %USERPROFILE% not set)".into(),
+        )
+    })?;
+    Ok(home.join(".claude").join(".credentials.json"))
+}
+
+/// Cross-platform home directory: `%USERPROFILE%` on Windows, `$HOME` on Unix.
+fn home_dir() -> Option<PathBuf> {
+    if let Some(base) = directories::BaseDirs::new() {
+        return Some(base.home_dir().to_path_buf());
+    }
+    // Fallback: legacy env vars (kept so behavior is unchanged on Unix even if
+    // BaseDirs ever fails to initialize).
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
 }
 
 pub fn read_from(path: &Path) -> Result<CredentialsFile> {

@@ -20,8 +20,8 @@ public sealed class Settings
     /// </summary>
     public int IntervalSeconds { get; set; } = 300;
 
-    /// <summary>Start the tray app automatically on user login.</summary>
-    public bool StartWithWindows { get; set; }
+    // Note: "start with Windows" is stored in the HKCU\...\Run registry key
+    // (the OS's own source of truth), not here — see TrayApp.SetAutoStart.
 
     [JsonIgnore]
     public int EffectiveIntervalSeconds => Math.Max(60, IntervalSeconds);

@@ -24,9 +24,6 @@ public sealed record UsageSnapshot
     public required string Vendor { get; init; }
     public Severity Severity { get; init; } = Severity.Low;
 
-    // Short text for the tray tooltip's first line / balloon title.
-    public string BarText { get; init; } = "";
-
     // Structured fields (best-effort; empty when a vendor doesn't expose them).
     public string Plan { get; init; } = "";
     public string SessionPct { get; init; } = "";
@@ -56,9 +53,12 @@ public sealed record UsageSnapshot
             parts.Add($"Session {SessionPct}%" +
                       (string.IsNullOrWhiteSpace(SessionReset) ? "" : $" ({SessionReset})"));
         if (!string.IsNullOrWhiteSpace(WeeklyPct))
-            parts.Add($"Weekly {WeeklyPct}%");
+            parts.Add($"Weekly {WeeklyPct}%" +
+                      (string.IsNullOrWhiteSpace(WeeklyReset) ? "" : $" ({WeeklyReset})"));
         var s = string.Join("  ·  ", parts);
-        return Truncate(string.IsNullOrWhiteSpace(s) ? BarText : s, 127);
+        // Fall back to the vendor name (never the raw delimited payload) if no
+        // structured field was present.
+        return Truncate(string.IsNullOrWhiteSpace(s) ? Vendor : s, 127);
     }
 
     private static string Truncate(string s, int max) =>
@@ -101,7 +101,8 @@ public static class UsageParser
 
         // Detect the backend's error fallback: text is "⚠" and tooltip carries
         // the message. (See widget::run::fallback / WaybarOutput::error.)
-        if (cleanText.Trim() == "⚠" || severity == Severity.Critical && cleanText.Contains('⚠'))
+        if (cleanText.Trim() == "⚠"
+            || (severity == Severity.Critical && cleanText.Contains('⚠')))
         {
             return new UsageSnapshot
             {
@@ -109,7 +110,6 @@ public static class UsageParser
                 Severity = Severity.Critical,
                 IsError = true,
                 ErrorMessage = StripPango(rawTooltip).Replace("\n", " ").Trim(),
-                BarText = cleanText,
             };
         }
 
@@ -121,7 +121,6 @@ public static class UsageParser
         {
             Vendor = vendor,
             Severity = severity,
-            BarText = cleanText,
             Plan = F(0),
             SessionPct = F(1),
             SessionReset = F(2),

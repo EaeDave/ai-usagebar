@@ -1,6 +1,3 @@
-using System.Threading;
-using System.Windows.Forms;
-
 namespace AiUsagebarTray;
 
 internal static class Program

@@ -1,7 +1,5 @@
-using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
-using System.Windows.Forms;
 
 namespace AiUsagebarTray;
 
@@ -77,8 +75,13 @@ public sealed class PanelForm : Form
             : 34 /*title*/ + rows * (48 + SectionGap) + 26 /*footer*/;
         Height = Pad * 2 + contentHeight;
 
+        // Form.Region's setter does not dispose the previous region, and
+        // Relayout runs on every refresh — so free the old one to avoid leaking
+        // one GDI region per poll.
+        var previous = Region;
         using var path = RoundedRect(new Rectangle(0, 0, Width, Height), CornerRadius);
         Region = new Region(path);
+        previous?.Dispose();
     }
 
     /// <summary>Show near the cursor, kept on-screen.</summary>

@@ -86,10 +86,12 @@ To pin it explicitly, edit
 {
   "BackendPath": "C:\\Users\\David\\dev\\projects\\ai-usagebar\\target\\release\\ai-usagebar.exe",
   "Vendor": "anthropic",
-  "IntervalSeconds": 300,
-  "StartWithWindows": false
+  "IntervalSeconds": 300
 }
 ```
+
+(Auto-start is toggled from the tray menu and stored in the
+`HKCU\…\Run` registry key, not in this file.)
 
 ## Notes
 

@@ -102,7 +102,7 @@ public sealed class Backend
             // non-empty one (the JSON document).
             var line = stdout
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                .LastOrDefault(l => l.TrimStart().StartsWith("{"))
+                .LastOrDefault(l => l.TrimStart().StartsWith('{'))
                 ?? stdout;
 
             return UsageParser.Parse(vendor, line.Trim());
@@ -122,6 +122,5 @@ public sealed class Backend
         Severity = Severity.Critical,
         IsError = true,
         ErrorMessage = msg,
-        BarText = "⚠",
     };
 }

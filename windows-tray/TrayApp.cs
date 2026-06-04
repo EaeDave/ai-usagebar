@@ -1,4 +1,3 @@
-using System.Windows.Forms;
 using Microsoft.Win32;
 
 namespace AiUsagebarTray;
@@ -132,6 +131,14 @@ public sealed class TrayApp : ApplicationContext
             _tray.Icon = SwapIcon(snap.Severity);
             _tray.Text = TrayTextFor(snap);
             _panel?.Update(snap);
+        }
+        catch (Exception ex)
+        {
+            // RefreshAsync is invoked from async-void Timer/menu handlers, so an
+            // escaping exception (GDI, paint, etc.) would reach the message loop
+            // and could crash the process. Surface it as a red icon instead.
+            _tray.Icon = SwapIcon(Severity.Critical);
+            _tray.Text = $"{_settings.Vendor}: {ex.Message}";
         }
         finally
         {

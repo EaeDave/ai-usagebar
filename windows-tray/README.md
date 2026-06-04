@@ -36,22 +36,37 @@ dotnet build -c Release
 dotnet run -c Release          # or run the built exe directly
 ```
 
-### Single self-contained exe (no .NET runtime needed on the target)
+### Portable bundle (self-contained, no .NET needed)
 
-The Release config already sets self-contained single-file publishing, so:
+The Release config publishes a compressed, self-contained single-file exe AND
+copies the Rust backend (`ai-usagebar.exe`) next to it, so the publish folder is
+a self-sufficient bundle:
 
 ```powershell
+# Build the backend first (from the repo root):
+cargo build --release
+# Then publish the tray (from windows-tray\):
 dotnet publish -c Release
 ```
 
-Output (one portable file you can copy anywhere / double-click):
+Output folder — copy it whole to any machine and double-click the tray exe:
 
 ```
-bin\Release\net8.0-windows\win-x64\publish\ai-usagebar-tray.exe
+bin\Release\net8.0-windows\win-x64\publish\
+  ├─ ai-usagebar-tray.exe   (UI; bundles the .NET runtime)
+  └─ ai-usagebar.exe        (Rust backend; copied automatically)
 ```
 
-It bundles the .NET runtime (so it runs on a machine without .NET) and is
-compressed. It still needs `ai-usagebar.exe` reachable (see Backend discovery).
+The tray probes "next to me" first, so the bundled backend is always used.
+
+> If `cargo build --release` hasn't been run, publish still succeeds but warns
+> that `ai-usagebar.exe` wasn't bundled. Point at a custom backend with
+> `dotnet publish -c Release -p:BackendExe=C:\path\to\ai-usagebar.exe`.
+
+**Note:** these are still two executables (a Rust backend + a C# UI) living in
+one folder — not a single merged binary. The tray runs the backend as a child
+process and reads its `--json`. This keeps all auth/API logic in the audited
+Rust binary.
 
 ## Backend discovery
 

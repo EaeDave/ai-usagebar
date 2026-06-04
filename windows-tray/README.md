@@ -1,0 +1,80 @@
+# ai-usagebar tray (Windows)
+
+A native Windows **system-tray** widget for
+[`ai-usagebar`](../README.md). It shells out to the native `ai-usagebar.exe`
+backend (`--json`) and renders:
+
+- A **colored tray dot** whose color follows the usage severity
+  (green → yellow → orange → red), matching the Waybar/TUI palette.
+- A **hover tooltip** with the plan + Session/Weekly summary (plain text).
+- **Left-click** → a bordered detail panel with progress bars.
+- **Right-click** → menu: Open panel, Refresh now, Vendor picker,
+  Start with Windows, Exit.
+
+The tray never reimplements vendor logic; all auth + API work stays in the
+Rust backend. This is a thin consumer of its JSON.
+
+## Prerequisites
+
+- **.NET SDK 8.0+** on Windows. Check / install:
+  ```powershell
+  dotnet --version
+  # if missing:
+  winget install --id Microsoft.DotNet.SDK.8 -e
+  ```
+- A built `ai-usagebar.exe` (see the repo root README — `cargo build --release`
+  produces `target\release\ai-usagebar.exe`).
+- A populated `%USERPROFILE%\.claude\.credentials.json` (or whichever vendor
+  you select) so the backend has something to report.
+
+## Build & run
+
+From this directory (`windows-tray`):
+
+```powershell
+dotnet build -c Release
+dotnet run -c Release          # or run the built exe directly
+```
+
+The built exe lands in `bin\Release\net8.0-windows\ai-usagebar-tray.exe`.
+
+### Single self-contained exe (no .NET runtime needed on the target)
+
+```powershell
+dotnet publish -c Release -r win-x64 --self-contained true `
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+```
+
+Output: `bin\Release\net8.0-windows\win-x64\publish\ai-usagebar-tray.exe`.
+
+## Backend discovery
+
+The tray finds `ai-usagebar.exe` in this order:
+
+1. The `BackendPath` in settings (if set).
+2. Next to the tray exe.
+3. Common dev/build locations (`..\..\..\..\target\release`,
+   `%USERPROFILE%\dev\projects\ai-usagebar\target\release`,
+   `%USERPROFILE%\.cargo\bin`).
+4. `ai-usagebar` on `PATH`.
+
+To pin it explicitly, edit
+`%APPDATA%\ai-usagebar-tray\settings.json`:
+
+```json
+{
+  "BackendPath": "C:\\Users\\David\\dev\\projects\\ai-usagebar\\target\\release\\ai-usagebar.exe",
+  "Vendor": "anthropic",
+  "IntervalSeconds": 300,
+  "StartWithWindows": false
+}
+```
+
+## Notes
+
+- **Poll interval** defaults to 300s. The Anthropic/OpenAI endpoints
+  rate-limit aggressively below ~300s; the floor is 60s.
+- **Auto-start** is implemented via the `HKCU\...\Run` registry key
+  (no admin needed).
+- The Windows tooltip is plain text (no Pango); the tray strips the
+  backend's `<span>` markup and shows a compact summary.

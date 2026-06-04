@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>ai-usagebar-tray</AssemblyName>
+    <RootNamespace>AiUsagebarTray</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- No console window flashing when we spawn ai-usagebar.exe. -->
+    <Version>0.1.0</Version>
+    <Product>ai-usagebar tray</Product>
+    <Description>Windows system-tray widget for ai-usagebar (Claude/GPT/GLM/OpenRouter usage).</Description>
+  </PropertyGroup>
+
+  <!-- Publish as a single self-contained exe:
+       dotnet publish -c Release -r win-x64 --self-contained true \
+         -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+  -->
+
+</Project>

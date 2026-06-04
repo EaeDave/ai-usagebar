@@ -36,16 +36,22 @@ dotnet build -c Release
 dotnet run -c Release          # or run the built exe directly
 ```
 
-The built exe lands in `bin\Release\net8.0-windows\ai-usagebar-tray.exe`.
-
 ### Single self-contained exe (no .NET runtime needed on the target)
 
+The Release config already sets self-contained single-file publishing, so:
+
 ```powershell
-dotnet publish -c Release -r win-x64 --self-contained true `
-  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+dotnet publish -c Release
 ```
 
-Output: `bin\Release\net8.0-windows\win-x64\publish\ai-usagebar-tray.exe`.
+Output (one portable file you can copy anywhere / double-click):
+
+```
+bin\Release\net8.0-windows\win-x64\publish\ai-usagebar-tray.exe
+```
+
+It bundles the .NET runtime (so it runs on a machine without .NET) and is
+compressed. It still needs `ai-usagebar.exe` reachable (see Backend discovery).
 
 ## Backend discovery
 

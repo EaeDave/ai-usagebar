@@ -2,7 +2,9 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    # Exclude the fork-only `v*-tray` tags — those are built/published by
+    # tray-release.yml, not the upstream Rust release pipeline.
+    tags: ["v*", "!v*-tray"]
   workflow_dispatch:
     inputs:
       ref:

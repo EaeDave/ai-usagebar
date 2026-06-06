@@ -9,7 +9,7 @@
     <AssemblyName>ai-usagebar-tray</AssemblyName>
     <RootNamespace>AiUsagebarTray</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Product>ai-usagebar tray</Product>
     <Description>Windows system-tray widget for ai-usagebar (Claude/GPT/GLM/OpenRouter usage).</Description>
   </PropertyGroup>

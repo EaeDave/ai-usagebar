@@ -1,0 +1,63 @@
+name: Tray Release
+
+# Builds the Windows system-tray bundle on a native windows-latest runner and
+# (on a v*-tray tag) attaches it to a DRAFT GitHub Release for the user to
+# verify and publish. The Waybar/CLI side is the upstream's release.yml; this is
+# the fork-only tray artifact.
+#
+# - workflow_dispatch: dry-run — builds + uploads the zip as a workflow artifact
+#   (no release), so the bundle can be validated before tagging.
+# - push of a `v*-tray` tag: builds + creates the draft release with the zip.
+on:
+  push:
+    tags: ["v*-tray"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build tray bundle (windows-latest)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: ilammy/setup-nasm@v1 # ring assembles its primitives on x86_64
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build Rust backend (ai-usagebar.exe)
+        run: cargo build --release
+
+      - name: Publish tray (self-contained win-x64)
+        working-directory: windows-tray
+        run: dotnet publish -c Release
+
+      - name: Package bundle
+        shell: pwsh
+        run: |
+          $pub = "windows-tray/bin/Release/net8.0-windows/win-x64/publish"
+          if (-not (Test-Path "$pub/ai-usagebar-tray.exe")) { throw "tray exe missing from publish folder" }
+          if (-not (Test-Path "$pub/ai-usagebar.exe"))      { throw "backend ai-usagebar.exe was not bundled" }
+          Compress-Archive -Path "$pub/*" -DestinationPath "ai-usagebar-tray-win-x64.zip" -Force
+          Get-ChildItem ai-usagebar-tray-win-x64.zip | Select-Object Name, Length
+
+      - name: Upload build artifact (inspection / dry-run)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-usagebar-tray-win-x64
+          path: ai-usagebar-tray-win-x64.zip
+
+      - name: Draft release (tag push only)
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: ai-usagebar tray for Windows ${{ github.ref_name }}
+          body_path: windows-tray/RELEASE_NOTES.md
+          files: ai-usagebar-tray-win-x64.zip
